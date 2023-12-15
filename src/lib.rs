@@ -67,7 +67,7 @@ impl<const N: u8> Enet<N> {
         // The user's buffer needs to be a non-zero multiple of 16 to account for
         // those extra bytes. We double-check this by asserting the requirement at
         // compile time in the IoBuffer types.
-        debug_assert!(rx_ring.mtu() != 0 && rx_ring.mtu() & 0xF == rx_ring.mtu());
+        debug_assert!(rx_ring.mtu() != 0 && rx_ring.mtu() & 0xF == 0);
         ral::write_reg!(ral::enet, enet, MRBR, R_BUF_SIZE: (rx_ring.mtu() >> 4) as u32);
 
         // Descriptor rings are pre-configured when the user acquires the slices.
