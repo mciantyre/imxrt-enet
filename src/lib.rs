@@ -75,10 +75,8 @@ impl<const N: u8> Enet<N> {
         ral::write_reg!(ral::enet, enet, RDSR, rx_ring.as_ptr() as _);
 
         const SMI_MDC_FREQUENCY_HZ: u32 = 2_500_000;
-        let mii_speed =
-            (source_clock_hz + 2 * SMI_MDC_FREQUENCY_HZ - 1) / (2 * SMI_MDC_FREQUENCY_HZ) - 1;
-        let hold_time =
-            (10 + 1_000_000_000 / source_clock_hz - 1) / (1_000_000_000 / source_clock_hz) - 1;
+        let mii_speed = source_clock_hz.div_ceil(2 * SMI_MDC_FREQUENCY_HZ) - 1;
+        let hold_time = 10_u32.div_ceil(1_000_000_000 / source_clock_hz) - 1;
         // TODO no way to enable / disable the MII management frame preamble. Maybe a new method
         // for the user?
         ral::modify_reg!(ral::enet, enet, MSCR, HOLDTIME: hold_time, MII_SPEED: mii_speed);

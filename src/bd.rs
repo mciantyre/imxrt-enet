@@ -76,6 +76,12 @@ unsafe impl<D, const COUNT: usize, const MTU: usize> Sync for IoBuffers<D, COUNT
 pub type TransmitBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<txbd::TxBD, COUNT, MTU>;
 pub type ReceiveBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<rxbd::RxBD, COUNT, MTU>;
 
+impl<D, const COUNT: usize, const MTU: usize> Default for IoBuffers<D, COUNT, MTU> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
     const MTU_IS_MULTIPLE_OF_16: () = assert!(MTU % 16 == 0);
 
@@ -91,7 +97,7 @@ impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
     fn init(
         &'static mut self,
         init_descriptors: impl Fn(&mut [D], &mut [DataBuffer<MTU>]),
-    ) -> IoSlices<D> {
+    ) -> IoSlices<'static, D> {
         // Safety: by taking 'static mut reference, we
         // ensure that we can only be called once.
         let ring = unsafe { self.ring.init() };
