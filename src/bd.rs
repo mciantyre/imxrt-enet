@@ -153,6 +153,9 @@ impl<'a, D> IoSlices<'a, D> {
     pub(crate) fn mtu(&self) -> usize {
         self.mtu
     }
+    pub(crate) fn len(&self) -> usize {
+        self.ring.len()
+    }
 }
 
 impl<D> IoSlices<'_, D> {

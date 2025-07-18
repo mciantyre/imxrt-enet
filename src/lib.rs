@@ -347,7 +347,7 @@ impl<const N: u8> smoltcp::phy::Device for Enet<N> {
         let mut caps = smoltcp::phy::DeviceCapabilities::default();
         caps.medium = smoltcp::phy::Medium::Ethernet;
         caps.max_transmission_unit = mtu;
-        caps.max_burst_size = Some(mtu);
+        caps.max_burst_size = Some(self.tx_ring.len().min(self.rx_ring.len()));
 
         caps.checksum.ipv4 = smoltcp::phy::Checksum::None;
         caps.checksum.udp = smoltcp::phy::Checksum::None;
