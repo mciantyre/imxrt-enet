@@ -236,7 +236,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 impl smoltcp::phy::RxToken for RxToken<'_> {
     fn consume<R, F>(self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> R,
+        F: FnOnce(&[u8]) -> R,
     {
         // Safety: hardware will not exceed our maximum frame length. We know that
         // the pointer is valid; see discussion above.
