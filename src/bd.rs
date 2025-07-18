@@ -3,28 +3,6 @@
 //! Buffer descriptors (BD) are defined with register access layer (RAL) compatibility.
 //! These definitions come from the i.MX RT 1170 reference manual, revision 2.
 
-macro_rules! bdfields {
-    ($name:ident, $type:ty $(, $field:ident [ offset = $offset:expr, bits = $bits:expr, $( $enum:ident = $val:expr $(,)? )* ] $(,)? )*) => {
-        pub mod $name {
-            $(
-                pub mod $field {
-                    #![allow(non_snake_case, non_upper_case_globals, dead_code)]
-                    // Assuming all fields are read-write.
-                    pub mod R {}
-                    pub mod W {}
-                    pub mod RW {
-                        $(
-                            pub const $enum: $type = $val;
-                        )*
-                    }
-                    pub const offset: $type = $offset;
-                    pub const mask: $type = ((1 << $bits) - 1) << offset;
-                }
-            )*
-        }
-    };
-}
-
 pub(crate) mod rxbd;
 pub(crate) mod txbd;
 
@@ -114,18 +92,17 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
     pub fn take(&'static mut self) -> IoSlices<'static, txbd::TxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
-                ral_registers::write_reg!(
-                    txbd,
-                    descriptor,
-                    data_buffer_pointer,
-                    buffer.0.as_mut_ptr() as _
-                );
+                descriptor
+                    .data_buffer_pointer
+                    .store(buffer.0.as_mut_ptr() as _, Ordering::SeqCst);
             }
 
             // When the DMA engine reaches this descriptor, it needs to wrap
             // around to the first descriptor.
             if let Some(descriptor) = descriptors.last_mut() {
-                ral_registers::modify_reg!(txbd, descriptor, flags, wrap: 1);
+                descriptor
+                    .flags
+                    .fetch_or(txbd::FLAGS_WRAP, Ordering::SeqCst);
             }
         })
     }
@@ -135,20 +112,19 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<rxbd::RxBD, COUNT, MTU> {
     pub fn take(&'static mut self) -> IoSlices<'static, rxbd::RxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
-                ral_registers::write_reg!(
-                    rxbd,
-                    descriptor,
-                    data_buffer_pointer,
-                    buffer.0.as_mut_ptr() as _
-                );
+                descriptor
+                    .data_buffer_pointer
+                    .store(buffer.0.as_mut_ptr() as _, Ordering::Relaxed);
                 // Zero all other flags.
-                ral_registers::write_reg!(rxbd, descriptor, flags, empty: 1);
+                descriptor.flags.store(rxbd::FLAGS_EMPTY, Ordering::SeqCst);
             }
 
             // When the DMA engine reaches this descriptor, it needs to wrap
             // around to the first descriptor.
             if let Some(descriptor) = descriptors.last_mut() {
-                ral_registers::modify_reg!(rxbd, descriptor, flags, wrap: 1);
+                descriptor
+                    .flags
+                    .fetch_or(rxbd::FLAGS_WRAP, Ordering::SeqCst);
             }
         })
     }
@@ -214,19 +190,13 @@ pub type RxToken<'a> = IoToken<'a, rxbd::RxBD, crate::RxReady<'a>>;
 
 impl ReceiveSlices<'_> {
     pub(crate) fn next_token<'a>(&'a mut self, ready: crate::RxReady<'a>) -> Option<RxToken<'a>> {
-        self.next_impl(
-            |rxbd| ral_registers::read_reg!(rxbd, rxbd, flags, empty == 0),
-            ready,
-        )
+        self.next_impl(|rxbd| !rxbd.is_empty(), ready)
     }
 }
 
 impl TransmitSlices<'_> {
     pub(crate) fn next_token<'a>(&'a mut self, ready: crate::TxReady<'a>) -> Option<TxToken<'a>> {
-        self.next_impl(
-            |txbd| ral_registers::read_reg!(txbd, txbd, flags, ready == 0),
-            ready,
-        )
+        self.next_impl(|txbd| !txbd.is_ready(), ready)
     }
 }
 
@@ -241,19 +211,18 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
         // lifetimes.
         let buffer = unsafe {
             assert!(len <= self.mtu);
-            let ptr =
-                ral_registers::read_reg!(txbd, self.descriptor, data_buffer_pointer) as *mut u8;
+            let ptr = self.descriptor.data_buffer_pointer.load(Ordering::Relaxed) as *mut u8;
             core::slice::from_raw_parts_mut(ptr, len)
         };
 
         let result = f(buffer);
-        core::sync::atomic::fence(Ordering::SeqCst);
 
-        ral_registers::write_reg!(txbd, self.descriptor, data_length, len as _);
-        ral_registers::modify_reg!(txbd, self.descriptor, flags,
-            ready: 1,
-            last_in: 1,
-            transmit_crc: 1,
+        self.descriptor
+            .data_length
+            .store(len as _, Ordering::Relaxed);
+        self.descriptor.flags.fetch_or(
+            txbd::FLAGS_READY | txbd::FLAGS_LAST_IN | txbd::FLAGS_TRANSMIT_CRC,
+            Ordering::SeqCst,
         );
         self.ready.consume();
         *self.index = self.next;
@@ -269,15 +238,16 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
         // Safety: hardware will not exceed our maximum frame length. We know that
         // the pointer is valid; see discussion above.
         let buffer = unsafe {
-            let len = ral_registers::read_reg!(rxbd, self.descriptor, data_length) as usize;
+            let len = self.descriptor.data_length.load(Ordering::Relaxed) as usize;
             assert!(len <= self.mtu);
-            let ptr =
-                ral_registers::read_reg!(rxbd, self.descriptor, data_buffer_pointer) as *mut u8;
+            let ptr = self.descriptor.data_buffer_pointer.load(Ordering::Relaxed) as *mut u8;
             core::slice::from_raw_parts_mut(ptr, len)
         };
 
         let result = f(buffer);
-        ral_registers::modify_reg!(rxbd, self.descriptor, flags, empty: 1);
+        self.descriptor
+            .flags
+            .fetch_or(rxbd::FLAGS_EMPTY, Ordering::SeqCst);
         self.ready.consume();
         *self.index = self.next;
         result

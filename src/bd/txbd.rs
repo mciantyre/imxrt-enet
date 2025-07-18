@@ -1,52 +1,31 @@
 //! Enhanced transmit buffer descriptor layout and fields.
 
-use ral_registers::RWRegister;
+use core::sync::atomic::{AtomicU16, AtomicU32, Ordering};
 
 #[repr(C)]
 pub struct TxBD {
-    pub data_length: RWRegister<u16>,
-    pub flags: RWRegister<u16>,
-    pub data_buffer_pointer: RWRegister<u32>,
-    pub errors: RWRegister<u16>,
-    pub control: RWRegister<u16>,
-    pub launch_time: RWRegister<u32>,
+    pub data_length: AtomicU16,
+    pub flags: AtomicU16,
+    pub data_buffer_pointer: AtomicU32,
+    pub errors: AtomicU16,
+    pub control: AtomicU16,
+    pub launch_time: AtomicU32,
     _reserved0: [u16; 1],
-    pub last_bdu: RWRegister<u16>,
-    pub timestamp_1588: RWRegister<u32>,
+    pub last_bdu: AtomicU16,
+    pub timestamp_1588: AtomicU32,
     _reserved1: [u16; 4],
 }
 
-bdfields!(flags, u16,
-    ready           [ offset = 15, bits = 1, ],
-    to1             [ offset = 14, bits = 1, ],
-    wrap            [ offset = 13, bits = 1, ],
-    to2             [ offset = 12, bits = 1, ],
-    last_in         [ offset = 11, bits = 1, ],
-    transmit_crc    [ offset = 10, bits = 1, ],
-);
+pub const FLAGS_READY: u16 = 1 << 15;
+pub const FLAGS_WRAP: u16 = 1 << 13;
+pub const FLAGS_LAST_IN: u16 = 1 << 11;
+pub const FLAGS_TRANSMIT_CRC: u16 = 1 << 10;
 
-bdfields!(errors, u16,
-    transmit            [ offset = 15, bits = 1, ],
-    underflow           [ offset = 13, bits = 1, ],
-    excess_collision    [ offset = 12, bits = 1, ],
-    frame_error         [ offset = 11, bits = 1, ],
-    late_collision      [ offset = 10, bits = 1, ],
-    overflow            [ offset =  9, bits = 1, ],
-    timestamp           [ offset =  8, bits = 1, ],
-);
-
-bdfields!(control, u16,
-    interrupt           [ offset = 14, bits = 1, ],
-    timestamp           [ offset = 13, bits = 1, ],
-    pins                [ offset = 12, bits = 1, ],
-    iins                [ offset = 11, bits = 1, ],
-    utlt                [ offset =  8, bits = 1, ],
-    ftype               [ offset =  4, bits = 4, NON_AVB = 0, AVB_A = 1, AVB_B = 2 ],
-);
-
-bdfields!(last_bdu, u16,
-    last_bdu            [ offset = 15, bits = 1, ],
-);
+impl TxBD {
+    pub(crate) fn is_ready(&self) -> bool {
+        self.flags.load(Ordering::SeqCst) & FLAGS_READY != 0
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -76,16 +55,5 @@ mod tests {
             unsafe { start.add(0x14) },
             addr_of!(txbd.timestamp_1588).cast()
         );
-    }
-
-    #[test]
-    fn bdfields_enum() {
-        let txbd = zeroed();
-        ral_registers::modify_reg!(super, &txbd, control, ftype: AVB_B);
-        assert_eq!(txbd.control.read(), 0x2 << 4);
-        ral_registers::modify_reg!(super, &txbd, control, interrupt: 1);
-        assert_eq!(txbd.control.read(), 0x2 << 4 | 1 << 14);
-        ral_registers::modify_reg!(super, &txbd, control, ftype: 0);
-        assert_eq!(txbd.control.read(), 1 << 14);
     }
 }

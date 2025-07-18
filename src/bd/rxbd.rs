@@ -1,65 +1,30 @@
 //! Enhanced receive buffer descriptor layout and fields.
 
-use ral_registers::{RORegister, RWRegister};
+use core::sync::atomic::{AtomicU16, AtomicU32, Ordering};
 
 #[repr(C)]
 pub struct RxBD {
-    pub data_length: RORegister<u16>,
-    pub flags: RWRegister<u16>,
-    pub data_buffer_pointer: RWRegister<u32>,
-    pub status: RWRegister<u16>,
-    pub control: RWRegister<u16>,
-    pub checksum: RORegister<u16>,
-    pub header: RORegister<u16>,
+    pub data_length: AtomicU16,
+    pub flags: AtomicU16,
+    pub data_buffer_pointer: AtomicU32,
+    pub status: AtomicU16,
+    pub control: AtomicU16,
+    pub checksum: AtomicU16,
+    pub header: AtomicU16,
     _reserved0: [u16; 1],
-    pub last_bdu: RWRegister<u16>,
-    pub timestamp_1588: RORegister<u32>,
+    pub last_bdu: AtomicU16,
+    pub timestamp_1588: AtomicU32,
     _reserved1: [u16; 4],
 }
 
-bdfields!(flags, u16,
-    empty               [ offset = 15, bits = 1, ],
-    ro1                 [ offset = 14, bits = 1, ],
-    wrap                [ offset = 13, bits = 1, ],
-    ro2                 [ offset = 12, bits = 1, ],
-    last                [ offset = 11, bits = 1, ],
+pub const FLAGS_EMPTY: u16 = 1 << 15;
+pub const FLAGS_WRAP: u16 = 1 << 13;
 
-    miss                [ offset =  8, bits = 1, ],
-    broadcast           [ offset =  7, bits = 1, ],
-    multicast           [ offset =  6, bits = 1, ],
-    length_violation    [ offset =  5, bits = 1, ],
-    non_octet_violation [ offset =  4, bits = 1, ],
-
-    crc_error           [ offset =  2, bits = 1, ],
-    overrun             [ offset =  1, bits = 1, ],
-    truncated           [ offset =  0, bits = 1, ],
-);
-
-bdfields!(status, u16,
-    vlan_priority           [ offset = 13, bits = 3, ],
-    ip_checksum_error       [ offset =  5, bits = 1, ],
-    protocol_checksum_error [ offset =  4, bits = 1, ],
-    vlan                    [ offset =  2, bits = 1, ],
-    ipv6                    [ offset =  1, bits = 1, ],
-    frag                    [ offset =  0, bits = 1, ],
-);
-
-bdfields!(control, u16,
-    mac_error               [ offset = 15, bits = 1, ],
-    phy_error               [ offset = 10, bits = 1, ],
-    collision               [ offset =  9, bits = 1, ],
-    unicast                 [ offset =  8, bits = 1, ],
-    interrupt               [ offset =  7, bits = 1, ],
-);
-
-bdfields!(header, u16,
-    length      [ offset = 11, bits = 5, ],
-    protocol    [ offset =  0, bits = 8, ],
-);
-
-bdfields!(last_bdu, u16,
-    last_bdu    [ offset = 15, bits = 1, ],
-);
+impl RxBD {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.flags.load(Ordering::SeqCst) & FLAGS_EMPTY != 0
+    }
+}
 
 #[cfg(test)]
 mod tests {
