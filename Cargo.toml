@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 ral-registers = "0.1"
-imxrt-ral = "0.5"
+imxrt-ral = "0.6"
 mdio = "0.1"
-defmt = "0.3"
+defmt = "1.0"
 
 [dependencies.smoltcp]
 version = "0.12"
