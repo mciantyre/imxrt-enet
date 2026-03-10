@@ -1,7 +1,6 @@
 //! Ethernet driver for i.MX RT MCUs.
 
 #![cfg_attr(all(target_arch = "arm", target_os = "none"), no_std)]
-#![deny(unsafe_op_in_unsafe_fn)]
 
 mod bd;
 
