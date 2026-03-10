@@ -61,7 +61,7 @@ impl<D, const COUNT: usize, const MTU: usize> Default for IoBuffers<D, COUNT, MT
 }
 
 impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
-    const MTU_IS_MULTIPLE_OF_16: () = assert!(MTU % 16 == 0);
+    const MTU_IS_MULTIPLE_OF_16: () = assert!(MTU.is_multiple_of(16));
 
     pub const fn new() -> Self {
         #[allow(clippy::let_unit_value)] // Force evaluation.
