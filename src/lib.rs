@@ -11,7 +11,8 @@ pub use mdio::miim::{Read as MiimRead, Write as MiimWrite};
 pub use smoltcp;
 
 /// Allows independent transmit and receive functions.
-#[derive(Debug, Clone, Copy, defmt::Format)]
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Duplex {
     /// Transmit and receive functions cannot overlap.
     ///
@@ -319,7 +320,8 @@ impl RxReady<'_> {
 ///
 /// TODO where are they?
 #[non_exhaustive]
-#[derive(Debug, defmt::Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum MiiError {}
 
 impl mdio::Read for Enet {
