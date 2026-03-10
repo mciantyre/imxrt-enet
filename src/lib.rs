@@ -27,6 +27,23 @@ pub enum Duplex {
     Full,
 }
 
+/// The "don't care" peripheral instance number.
+const ANY_INSTANCE: u8 = u8::MAX;
+
+/// An ENET instance without its compile-time instance number.
+type AnyInstance = ral::enet::Instance<{ ANY_INSTANCE }>;
+
+/// Discard the instance identifier.
+fn into_any<const N: u8>(inst: ral::enet::Instance<N>) -> AnyInstance {
+    // Safety: a properly-constructed instance points
+    // to static MMIO and is assumed to "own" that MMIO
+    // space. Assume static lifetime and take ownership.
+    unsafe {
+        let rb: *const ral::enet::RegisterBlock = &*inst;
+        AnyInstance::new(rb)
+    }
+}
+
 /// Ethernet MAC and related functions.
 ///
 /// The MDIO interface is always enabled. To generally use the MDIO interface,
@@ -36,15 +53,30 @@ pub enum Duplex {
 /// The MAC implements the `phy` interfaces from [`smoltcp`]. The driver optimizes
 /// for hardware-based checksumming as much as possible, but this only applies to
 /// the network and transport layers.
-pub struct Enet<const N: u8> {
-    enet: ral::enet::Instance<N>,
+pub struct Enet {
+    enet: ral::enet::Instance<{ ANY_INSTANCE }>,
     tx_ring: TransmitSlices<'static>,
     rx_ring: ReceiveSlices<'static>,
 }
 
-impl<const N: u8> Enet<N> {
-    pub fn new(
+impl Enet {
+    /// Create and initialize an ENET driver.
+    ///
+    /// This resets and initializes the ENET IP block. However, the MAC
+    /// is off when the driver is returned. You're expected to apply other
+    /// configurations before enabling the MAC.
+    pub fn new<const N: u8>(
         enet: ral::enet::Instance<N>,
+        tx_ring: TransmitSlices<'static>,
+        rx_ring: ReceiveSlices<'static>,
+        source_clock_hz: u32,
+        mac: &[u8; 6],
+    ) -> Self {
+        Self::init(into_any(enet), tx_ring, rx_ring, source_clock_hz, mac)
+    }
+
+    fn init(
+        enet: AnyInstance,
         tx_ring: TransmitSlices<'static>,
         rx_ring: ReceiveSlices<'static>,
         source_clock_hz: u32,
@@ -291,7 +323,7 @@ impl RxReady<'_> {
 #[derive(Debug, defmt::Format)]
 pub enum MiiError {}
 
-impl<const N: u8> mdio::Read for Enet<N> {
+impl mdio::Read for Enet {
     type Error = MiiError;
 
     #[inline]
@@ -308,7 +340,7 @@ impl<const N: u8> mdio::Read for Enet<N> {
     }
 }
 
-impl<const N: u8> mdio::Write for Enet<N> {
+impl mdio::Write for Enet {
     type Error = MiiError;
 
     #[inline]
@@ -324,7 +356,7 @@ impl<const N: u8> mdio::Write for Enet<N> {
     }
 }
 
-impl<const N: u8> smoltcp::phy::Device for Enet<N> {
+impl smoltcp::phy::Device for Enet {
     type RxToken<'a> = bd::RxToken<'a>;
     type TxToken<'a> = bd::TxToken<'a>;
 
