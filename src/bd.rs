@@ -3,6 +3,11 @@
 //! Buffer descriptors (BD) are defined with register access layer (RAL) compatibility.
 //! These definitions come from the i.MX RT 1170 reference manual, revision 2.
 
+#![expect(
+    clippy::new_without_default,
+    reason = "default() isn't const, useless for static init"
+)]
+
 pub(crate) mod rxbd;
 pub(crate) mod txbd;
 
@@ -44,8 +49,7 @@ impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
     pub const fn new() -> Self {
-        const ZERO: txbd::TxBD = txbd::TxBD::zero();
-        Self::with_ring(DescriptorRing([ZERO; COUNT]))
+        Self::with_ring(DescriptorRing([const { txbd::TxBD::zero() }; COUNT]))
     }
 
     pub fn take(&'static mut self) -> IoSlices<'static, txbd::TxBD> {
@@ -69,8 +73,7 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<rxbd::RxBD, COUNT, MTU> {
     pub const fn new() -> Self {
-        const ZERO: rxbd::RxBD = rxbd::RxBD::zero();
-        Self::with_ring(DescriptorRing([ZERO; COUNT]))
+        Self::with_ring(DescriptorRing([const { rxbd::RxBD::zero() }; COUNT]))
     }
 
     pub fn take(&'static mut self) -> IoSlices<'static, rxbd::RxBD> {
