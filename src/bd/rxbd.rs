@@ -21,6 +21,22 @@ pub const FLAGS_EMPTY: u16 = 1 << 15;
 pub const FLAGS_WRAP: u16 = 1 << 13;
 
 impl RxBD {
+    pub(crate) const fn zero() -> Self {
+        Self {
+            data_length: AtomicU16::new(0),
+            flags: AtomicU16::new(0),
+            data_buffer_pointer: AtomicU32::new(0),
+            status: AtomicU16::new(0),
+            control: AtomicU16::new(0),
+            checksum: AtomicU16::new(0),
+            header: AtomicU16::new(0),
+            _reserved0: [0; 1],
+            last_bdu: AtomicU16::new(0),
+            timestamp_1588: AtomicU32::new(0),
+            _reserved1: [0; 4],
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.flags.load(Ordering::SeqCst) & FLAGS_EMPTY != 0
     }

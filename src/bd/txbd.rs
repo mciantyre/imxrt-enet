@@ -22,6 +22,21 @@ pub const FLAGS_LAST_IN: u16 = 1 << 11;
 pub const FLAGS_TRANSMIT_CRC: u16 = 1 << 10;
 
 impl TxBD {
+    pub(crate) const fn zero() -> Self {
+        Self {
+            data_length: AtomicU16::new(0),
+            flags: AtomicU16::new(0),
+            data_buffer_pointer: AtomicU32::new(0),
+            errors: AtomicU16::new(0),
+            control: AtomicU16::new(0),
+            launch_time: AtomicU32::new(0),
+            _reserved0: [0; 1],
+            last_bdu: AtomicU16::new(0),
+            timestamp_1588: AtomicU32::new(0),
+            _reserved1: [0; 4],
+        }
+    }
+
     pub(crate) fn is_ready(&self) -> bool {
         self.flags.load(Ordering::SeqCst) & FLAGS_READY != 0
     }

@@ -6,69 +6,28 @@
 pub(crate) mod rxbd;
 pub(crate) mod txbd;
 
-use core::{cell::UnsafeCell, mem::MaybeUninit, sync::atomic::Ordering};
+use core::sync::atomic::Ordering;
 
 #[repr(align(64))]
-struct DescriptorRing<D, const N: usize>(UnsafeCell<MaybeUninit<[D; N]>>);
-unsafe impl<D, const N: usize> Sync for DescriptorRing<D, N> {}
-
-impl<D, const N: usize> DescriptorRing<D, N> {
-    const fn new() -> Self {
-        Self(UnsafeCell::new(MaybeUninit::uninit()))
-    }
-
-    /// # Safety
-    ///
-    /// Can only be called once. Multiple calls will release multiple mutable references
-    /// to the same memory.
-    unsafe fn init(&mut self) -> &mut [D] {
-        let ring: *mut MaybeUninit<[D; N]> = self.0.get();
-        // Transparent elements let us treat each element as uninitialized.
-        let ring: *mut [MaybeUninit<D>; N] = ring.cast();
-        // Array pointer == pointer to first element.
-        let ring: *mut MaybeUninit<D> = ring.cast();
-
-        for descriptor in 0..N {
-            // Safety: D is either a TX or RX buffer descriptor. It's OK
-            // to initialize them to a bitpattern of zero. This pointer
-            // is valid for all descriptor offsets.
-            unsafe { ring.add(descriptor).write(MaybeUninit::zeroed()) };
-        }
-
-        // Safety: all descriptors are initialized to zero.
-        unsafe { core::slice::from_raw_parts_mut(ring.cast(), N) }
-    }
-}
+struct DescriptorRing<D, const N: usize>([D; N]);
 
 #[repr(align(64))]
-#[derive(Clone, Copy)]
 struct DataBuffer<const N: usize>([u8; N]);
-unsafe impl<const N: usize> Sync for DataBuffer<N> {}
 
 pub struct IoBuffers<D, const COUNT: usize, const MTU: usize> {
     ring: DescriptorRing<D, COUNT>,
-    buffers: UnsafeCell<[DataBuffer<MTU>; COUNT]>,
+    buffers: [DataBuffer<MTU>; COUNT],
 }
-unsafe impl<D, const COUNT: usize, const MTU: usize> Sync for IoBuffers<D, COUNT, MTU> {}
 
 pub type TransmitBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<txbd::TxBD, COUNT, MTU>;
 pub type ReceiveBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<rxbd::RxBD, COUNT, MTU>;
 
-impl<D, const COUNT: usize, const MTU: usize> Default for IoBuffers<D, COUNT, MTU> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
-    const MTU_IS_MULTIPLE_OF_16: () = assert!(MTU.is_multiple_of(16));
-
-    pub const fn new() -> Self {
-        #[allow(clippy::let_unit_value)] // Force evaluation.
-        let _: () = Self::MTU_IS_MULTIPLE_OF_16;
+    const fn with_ring(ring: DescriptorRing<D, COUNT>) -> Self {
+        assert!(MTU.is_multiple_of(16));
         Self {
-            ring: DescriptorRing::new(),
-            buffers: UnsafeCell::new([DataBuffer([0; MTU]); COUNT]),
+            ring,
+            buffers: [const { DataBuffer([0; MTU]) }; COUNT],
         }
     }
 
@@ -76,19 +35,19 @@ impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
         &'static mut self,
         init_descriptors: impl Fn(&mut [D], &mut [DataBuffer<MTU>]),
     ) -> IoSlices<'static, D> {
-        // Safety: by taking 'static mut reference, we
-        // ensure that we can only be called once.
-        let ring = unsafe { self.ring.init() };
-        // Safety: since this is only called once, we're taking the only
-        // mutable reference available to the program.
-        let buffers = unsafe { &mut *self.buffers.get() };
-        let buffers = buffers.as_mut_slice();
+        let ring = &mut self.ring.0;
+        let buffers = self.buffers.as_mut_slice();
         init_descriptors(ring, buffers);
         IoSlices::new(ring, MTU)
     }
 }
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
+    pub const fn new() -> Self {
+        const ZERO: txbd::TxBD = txbd::TxBD::zero();
+        Self::with_ring(DescriptorRing([ZERO; COUNT]))
+    }
+
     pub fn take(&'static mut self) -> IoSlices<'static, txbd::TxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
@@ -109,6 +68,11 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
 }
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<rxbd::RxBD, COUNT, MTU> {
+    pub const fn new() -> Self {
+        const ZERO: rxbd::RxBD = rxbd::RxBD::zero();
+        Self::with_ring(DescriptorRing([ZERO; COUNT]))
+    }
+
     pub fn take(&'static mut self) -> IoSlices<'static, rxbd::RxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
