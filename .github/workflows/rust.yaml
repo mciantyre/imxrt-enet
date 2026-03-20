@@ -45,6 +45,21 @@ jobs:
     - name: Run tests
       run: cargo test --features=imxrt-ral/imxrt1062,smoltcp/socket-udp
 
+  imxrt-ral-compat:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        imxrt-ral-version: ["0.5.4", "0.6.1"]
+    steps:
+    - uses: actions/checkout@v6
+    - run: rustup toolchain install stable --no-self-update --profile minimal --target thumbv7em-none-eabihf
+    - name: Pin imxrt-ral version
+      run: cargo update -p imxrt-ral --precise ${{ matrix.imxrt-ral-version }}
+    - name: Check the package
+      run: cargo check --features=imxrt-ral/imxrt1062,smoltcp/socket-udp --target=x86_64-unknown-linux-gnu --target=thumbv7em-none-eabihf
+    - name: Run tests
+      run: cargo test --features=imxrt-ral/imxrt1062,smoltcp/socket-udp
+
   smoltcp-compat:
     runs-on: ubuntu-latest
     strategy:
