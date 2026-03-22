@@ -1,6 +1,91 @@
-//! Ethernet driver for i.MX RT MCUs.
+//! Ethernet driver for NXP's i.MX RT MCUs.
+//!
+//! The driver supports the `ENET` peripheral found in many four-digit i.MX
+//! RT MCUs. [imxrt-ral] provides the `ENET` peripheral instance definition.
+//! [smoltcp] provides the networking stack.
+//!
+//! [imxrt-ral]: https://docs.rs/imxrt-ral
+//! [smoltcp]: https://docs.rs/smoltcp
+//!
+//! # Getting started
+//!
+//! This driver requires that you enable a compatible MCU feature from [imxrt-ral].
+//! Be aware that other dependencies may set these features for you. You'll also need
+//! to set [smoltcp] features that are appropriate for your networking needs.
+//!
+//! This driver does *none* of the following:
+//!
+//! - configures MCU clocks.
+//! - mulitplexes MCU pins for your (R)MII, MDIO signals.
+//! - configures a PHY.
+//!
+//! You'll likely need to do these yourself. Although it does not configure the
+//! PHY, the [`Enet`] object has an MDIO interface that you may use.
+//!
+//! Allocate [`ReceiveBuffers`] and [`TransmitBuffers`]. These describe
+//!
+//! - how many of largest frames can be pending in receive / transmit operations.
+//! - how larger your largest receive / transmit Ethernet frame can be (1536 bytes
+//!   by default)
+//!
+//! Construct and configure your [`Enet`] driver, enable it, and use it with smoltcp.
+//!
+//! ```rust,no_run
+//! use static_cell::ConstStaticCell;
+//! use imxrt_enet::{Enet, ReceiveBuffers, TransmitBuffers};
+//! use smoltcp::{iface::{Config, Interface}, wire::EthernetAddress};
+//!
+//! # fn init_phy(enet: &mut Enet) -> Option<()> { Some(()) }
+//! static RX_BUFFERS: ConstStaticCell<ReceiveBuffers<4>> =
+//!     ConstStaticCell::new(ReceiveBuffers::new());
+//! static TX_BUFFERS: ConstStaticCell<TransmitBuffers<4>> =
+//!     ConstStaticCell::new(TransmitBuffers::new());
+//!
+//! const MAC: [u8; 6] = // Your MAC address.
+//! # [6, 5, 4, 3, 2, 1];
+//! const SOURCE_CLK_HZ: u32 = // Your ENET clock frequency.
+//! # 50_000_000;
+//!
+//! let enet: imxrt_ral::enet::ENET1 = // Your peripheral instance.
+//! # unsafe { imxrt_ral::enet::ENET1::instance() };
+//!
+//! # (|| -> Option<()> {
+//! let mut enet = Enet::new(
+//!     enet,
+//!     TX_BUFFERS.take().take(),
+//!     RX_BUFFERS.take().take(),
+//!     SOURCE_CLK_HZ,
+//!     &MAC,
+//! );
+//!
+//! // You may initialize your PHY using the ENET
+//! // driver's MDIO interface.
+//! init_phy(&mut enet);
+//!
+//! // There's other ENET configurations you may want
+//! // to change, like duplex, RMII, 10Mbit throttling,
+//! // MAC statistics...
+//!
+//! // Eventually, enable the MAC.
+//! enet.enable_mac(true);
+//!
+//! let mut iface = Interface::new(
+//!    Config::new(EthernetAddress(MAC).into()),
+//!    &mut enet,
+//!    // Time of creation...
+//!    # smoltcp::time::Instant::from_millis(0),
+//! );
+//! // Use the interface with smoltcp.
+//! # Some(())})();
+//! ```
 
 #![cfg_attr(all(target_arch = "arm", target_os = "none"), no_std)]
+#![warn(
+    missing_docs,
+    unsafe_op_in_unsafe_fn,
+    clippy::undocumented_unsafe_blocks,
+    clippy::missing_safety_doc
+)]
 
 mod bd;
 
@@ -318,7 +403,8 @@ impl RxReady<'_> {
 
 /// An error during an MII transfer.
 ///
-/// TODO where are they?
+/// Currently, there are no errors. This is a
+/// placeholder for future error handling.
 #[non_exhaustive]
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

@@ -19,13 +19,25 @@ struct DescriptorRing<D, const N: usize>([D; N]);
 #[repr(align(64))]
 struct DataBuffer<const N: usize>([u8; N]);
 
+/// Buffers for Ethernet frames.
+///
+/// `COUNT` is how many `MTU`-sized buffers are available to
+/// receive and transmit. By default, `MTU` is 1536 bytes.
+///
+/// Each buffer requires its own DMA descriptor. Those are
+/// allocated by default when you reference [`ReceiveBuffers`]
+/// and [`TransmitBuffers`].
 pub struct IoBuffers<D, const COUNT: usize, const MTU: usize> {
     ring: DescriptorRing<D, COUNT>,
     buffers: [DataBuffer<MTU>; COUNT],
 }
 
-pub type TransmitBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<txbd::TxBD, COUNT, MTU>;
-pub type ReceiveBuffers<const COUNT: usize, const MTU: usize> = IoBuffers<rxbd::RxBD, COUNT, MTU>;
+/// Buffers in the transmit path.
+pub type TransmitBuffers<const COUNT: usize, const MTU: usize = 1536> =
+    IoBuffers<txbd::TxBD, COUNT, MTU>;
+/// Buffers in the receive path.
+pub type ReceiveBuffers<const COUNT: usize, const MTU: usize = 1536> =
+    IoBuffers<rxbd::RxBD, COUNT, MTU>;
 
 impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
     const fn with_ring(ring: DescriptorRing<D, COUNT>) -> Self {
@@ -48,10 +60,12 @@ impl<D, const COUNT: usize, const MTU: usize> IoBuffers<D, COUNT, MTU> {
 }
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
+    /// Allocate space for the buffers and their descriptors.
     pub const fn new() -> Self {
         Self::with_ring(DescriptorRing([const { txbd::TxBD::zero() }; COUNT]))
     }
 
+    /// Take the buffers and represent them as slices.
     pub fn take(&'static mut self) -> IoSlices<'static, txbd::TxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
@@ -72,10 +86,12 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<txbd::TxBD, COUNT, MTU> {
 }
 
 impl<const COUNT: usize, const MTU: usize> IoBuffers<rxbd::RxBD, COUNT, MTU> {
+    /// Allocate space for the buffers and their descriptors.
     pub const fn new() -> Self {
         Self::with_ring(DescriptorRing([const { rxbd::RxBD::zero() }; COUNT]))
     }
 
+    /// Take the buffers and represent them as slices.
     pub fn take(&'static mut self) -> IoSlices<'static, rxbd::RxBD> {
         self.init(|descriptors, buffers| {
             for (descriptor, buffer) in descriptors.iter_mut().zip(buffers.iter_mut()) {
@@ -97,13 +113,16 @@ impl<const COUNT: usize, const MTU: usize> IoBuffers<rxbd::RxBD, COUNT, MTU> {
     }
 }
 
+/// Tracks buffers and a ring of descriptors.
 pub struct IoSlices<'a, D> {
     ring: &'a mut [D],
     mtu: usize,
     index: usize,
 }
 
+/// Slice of receive buffers and descriptors.
 pub type ReceiveSlices<'a> = IoSlices<'a, rxbd::RxBD>;
+/// Slice of transmit buffers and descriptors.
 pub type TransmitSlices<'a> = IoSlices<'a, txbd::TxBD>;
 
 impl<'a, D> IoSlices<'a, D> {
