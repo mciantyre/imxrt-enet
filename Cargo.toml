@@ -28,3 +28,7 @@ features = [
 
 [dev-dependencies]
 static_cell = "2.1"
+
+[package.metadata.docs.rs]
+default-target = "thumbv7em-none-eabihf"
+features = ["imxrt-ral/imxrt1062", "smoltcp/socket-udp"]
