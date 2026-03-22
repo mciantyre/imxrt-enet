@@ -6,7 +6,7 @@
 
 First release to crates.io. Supports
 
-- imxrt-ral 0.5 and 0.6
-- smoltcp 0.12 and 0.13
+- imxrt-ral 0.6
+- smoltcp 0.13
 
 ENET\_1G is not supported.
