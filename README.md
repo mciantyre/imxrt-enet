@@ -2,6 +2,8 @@
 
 An Ethernet driver for i.MX RT MCUs with support for `smoltcp`.
 
+- [API docs (main branch)](https://imxrt-rs.github.io/imxrt-enet/)
+
 ## Development
 
 To build the driver in this repo, enable
